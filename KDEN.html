@@ -1,0 +1,918 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VocabQuest - AI English Quiz for Kids</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Canvas Confetti -->
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+  <!-- HTML2Canvas for Screenshot generation -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <!-- React & React DOM -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <!-- Babel for JSX -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <!-- Firebase CDN Imports -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getFirestore, doc, setDoc, onSnapshot, collection } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+    // Global handles for React component usage
+    window.firebaseServices = {
+      initializeApp,
+      getAuth,
+      signInAnonymously,
+      signInWithCustomToken,
+      onAuthStateChanged,
+      getFirestore,
+      doc,
+      setDoc,
+      onSnapshot,
+      collection
+    };
+  </script>
+
+  <style>
+    body {
+      font-family: 'Nunito', sans-serif;
+      background: linear-gradient(135deg, #e0e7ff 0%, #f3e8ff 50%, #fce7f3 100%);
+      min-height: 100vh;
+    }
+    h1, h2, h3, .font-fun {
+      font-family: 'Fredoka', sans-serif;
+    }
+    @keyframes popIn {
+      0% { transform: scale(0.9); opacity: 0; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+    .animate-pop {
+      animation: popIn 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+    }
+  </style>
+</head>
+<body class="antialiased text-slate-800">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    // 100 Default Words List (10 Sets)
+    const DEFAULT_WORDS = [
+      { id: 1, word: "Erroneous", meaning: "wrong; incorrect" },
+      { id: 2, word: "Essence", meaning: "the intrinsic nature or indispensable quality" },
+      { id: 3, word: "Gimmick", meaning: "a trick or device intended to attract attention" },
+      { id: 4, word: "Occult", meaning: "mysterious or supernatural forces" },
+      { id: 5, word: "Syllabus", meaning: "an outline of the subjects in a course" },
+      { id: 6, word: "Symmetry", meaning: "balanced proportions or beauty" },
+      { id: 7, word: "Tattoo", meaning: "a permanent image on the skin" },
+      { id: 8, word: "Territory", meaning: "an area of land under a jurisdiction" },
+      { id: 9, word: "Utterance", meaning: "a spoken word or statement" },
+      { id: 10, word: "Warranty", meaning: "a written guarantee for a product" },
+      { id: 11, word: "Accomplices", meaning: "partners in a crime or secret plan" },
+      { id: 12, word: "Affable", meaning: "friendly, good-natured, or easy to talk to" },
+      { id: 13, word: "Amicably", meaning: "in a friendly and peaceable manner" },
+      { id: 14, word: "Befriended", meaning: "acted as a friend to someone" },
+      { id: 15, word: "Camaraderie", meaning: "mutual trust and friendship among companions" },
+      { id: 16, word: "Cordial", meaning: "warm and friendly" },
+      { id: 17, word: "Crony", meaning: "a close friend or companion" },
+      { id: 18, word: "Genial", meaning: "friendly and cheerful" },
+      { id: 19, word: "Inseparable", meaning: "unable to be separated or parted" },
+      { id: 20, word: "Jovial", meaning: "cheerful and friendly" },
+      { id: 21, word: "Adversary", meaning: "one's opponent in a conflict or contest" },
+      { id: 22, word: "Combatants", meaning: "persons or groups engaged in fighting" },
+      { id: 23, word: "Dogfight", meaning: "a close combat between fighter aircrafts" },
+      { id: 24, word: "Foray", meaning: "a sudden attack or raid into enemy territory" },
+      { id: 25, word: "Fray", meaning: "a situation of intense activity or fighting" },
+      { id: 26, word: "Melee", meaning: "a confused fight, scuffle, or brawl" },
+      { id: 27, word: "Nemesis", meaning: "an archenemy or persistent rival" },
+      { id: 28, word: "Saboteurs", meaning: "people who deliberately destroy property" },
+      { id: 29, word: "Skirmish", meaning: "an episode of irregular or unplanned fighting" },
+      { id: 30, word: "Tussle", meaning: "a vigorous struggle or scuffle" },
+      { id: 31, word: "Criminal underworld", meaning: "the secret world of organized crime" },
+      { id: 32, word: "Deduction", meaning: "reasoning from general premises to a specific conclusion" },
+      { id: 33, word: "Forensics", meaning: "scientific tests used in crime investigation" },
+      { id: 34, word: "Gangsters", meaning: "members of an organized gang of criminals" },
+      { id: 35, word: "Implications", meaning: "possible effects or conclusions" },
+      { id: 36, word: "Informant", meaning: "a person who gives secret information to police" },
+      { id: 37, word: "Intelligence", meaning: "secret information collected about an enemy" },
+      { id: 38, word: "Investigator", meaning: "a person who carries out a formal inquiry" },
+      { id: 39, word: "Mafia", meaning: "an organized international crime syndicate" },
+      { id: 40, word: "Mobsters", meaning: "members of a criminal mafia gang" },
+      { id: 41, word: "Private eye", meaning: "a private detective" },
+      { id: 42, word: "Shadowing", meaning: "following someone secretly" },
+      { id: 43, word: "Sleuths", meaning: "detectives" },
+      { id: 44, word: "Surveillance", meaning: "close observation of a suspected person" },
+      { id: 45, word: "Suspicions", meaning: "feelings that someone is guilty of something" },
+      { id: 46, word: "Testimony", meaning: "a formal written or spoken statement in court" },
+      { id: 47, word: "Victim", meaning: "a person harmed as a result of a crime" },
+      { id: 48, word: "Villainy", meaning: "wicked or criminal behavior" },
+      { id: 49, word: "Wiretap", meaning: "listening secretly to phone conversations" },
+      { id: 50, word: "Witnessed", meaning: "saw an event or crime happen" },
+      { id: 51, word: "Admitted", meaning: "confessed to be true" },
+      { id: 52, word: "Interrupted", meaning: "stopped the continuous progress of someone speaking" },
+      { id: 53, word: "Begged", meaning: "asked earnestly or humbly" },
+      { id: 54, word: "Lectured", meaning: "gave an educational talk or serious warning" },
+      { id: 55, word: "Beseeched", meaning: "asked someone urgently and fervently" },
+      { id: 56, word: "Moaned", meaning: "complained in a grieving way" },
+      { id: 57, word: "Bragged", meaning: "talked with excessive pride" },
+      { id: 58, word: "Pleaded", meaning: "made an emotional appeal" },
+      { id: 59, word: "Commanded", meaning: "ordered someone authoritatively" },
+      { id: 60, word: "Preached", meaning: "delivered a sermon or religious address" },
+      { id: 61, word: "Confessed", meaning: "admitted that one committed a crime" },
+      { id: 62, word: "Reiterated", meaning: "said something again for emphasis" },
+      { id: 63, word: "Exclaimed", meaning: "cried out suddenly in surprise or anger" },
+      { id: 64, word: "Requested", meaning: "asked politely for something" },
+      { id: 65, word: "Grumbled", meaning: "complained in a low voice" },
+      { id: 66, word: "Responded", meaning: "replied or answered" },
+      { id: 67, word: "Instructed", meaning: "directed or ordered someone to do something" },
+      { id: 68, word: "Retorted", meaning: "replied in a sharp or witty manner" },
+      { id: 69, word: "Interrogated", meaning: "questioned someone closely or aggressively" },
+      { id: 70, word: "Warned", meaning: "informed someone in advance of a danger" },
+      { id: 71, word: "Unbiased", meaning: "impartial and fair" },
+      { id: 72, word: "Unbridled", meaning: "uncontrolled or unconstrained" },
+      { id: 73, word: "Uncanny", meaning: "strange or mysterious, unsettling" },
+      { id: 74, word: "Uncharted", meaning: "not mapped or explored" },
+      { id: 75, word: "Unchecked", meaning: "not controlled or restrained" },
+      { id: 76, word: "Uncouth", meaning: "lacking good manners or refinement" },
+      { id: 77, word: "Unearth", meaning: "find or discover by digging" },
+      { id: 78, word: "Unerring", meaning: "always accurate; making no errors" },
+      { id: 79, word: "Unfounded", meaning: "having no foundation or basis in fact" },
+      { id: 80, word: "Unfurled", meaning: "spread out or unfolded" },
+      { id: 81, word: "Unheeded", meaning: "heard or noticed but ignored" },
+      { id: 82, word: "Unhinged", meaning: "mentally unbalanced or deranged" },
+      { id: 83, word: "Unnamed", meaning: "having no name or not mentioned" },
+      { id: 84, word: "Unnerve", meaning: "make someone lose courage or confidence" },
+      { id: 85, word: "Unravel", meaning: "solve or clarify a mystery or puzzle" },
+      { id: 86, word: "Unsavoury", meaning: "disagreeable or unpleasant" },
+      { id: 87, word: "Unscathed", meaning: "without suffering any injury or damage" },
+      { id: 88, word: "Unsuited", meaning: "not convenient or suitable" },
+      { id: 89, word: "Untapped", meaning: "not yet exploited or used" },
+      { id: 90, word: "Unwieldy", meaning: "hard to carry or move because of size" },
+      { id: 91, word: "Absurd", meaning: "wildly unreasonable or ridiculous" },
+      { id: 92, word: "Asinine", meaning: "extremely foolish or stupid" },
+      { id: 93, word: "Barmy", meaning: "mad or crazy" },
+      { id: 94, word: "Farcical", meaning: "relating to absurd or ridiculous elements" },
+      { id: 95, word: "Far-fetched", meaning: "unlikely and unconvincing" },
+      { id: 96, word: "Foolhardy", meaning: "recklessly bold or rash" },
+      { id: 97, word: "Frivolous", meaning: "not having any serious purpose or value" },
+      { id: 98, word: "Hare-brained", meaning: "ill-judged or rash" },
+      { id: 99, word: "Idiotic", meaning: "very stupid or foolish" },
+      { id: 100, word: "Inane", meaning: "silly or senseless" }
+    ];
+
+    // Helper: Gemini API Generator (Single & Double Blanks)
+    async function fetchAIQuestion(targetItems, allWords, quizMode) {
+      const apiKey = "";
+      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+
+      if (quizMode === 'double') {
+        const word1 = targetItems[0];
+        const word2 = targetItems[1];
+
+        const prompt = `Create a fun fill-in-the-blank English sentence for a 12-year-old kid with TWO blanks: (____1____) and (____2____).
+Target Word 1: "${word1.word}" (${word1.meaning})
+Target Word 2: "${word2.word}" (${word2.meaning})
+
+Respond strictly in valid JSON format:
+{
+  "sentence": "The story sentence using (____1____) for word 1 and (____2____) for word 2.",
+  "explanation": "Brief 1-sentence kid-friendly explanation of why both words fit."
+}`;
+
+        try {
+          const payload = {
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { responseMimeType: "application/json" }
+          };
+          const response = await fetch(apiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          const data = await response.json();
+          const jsonText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+          const parsed = JSON.parse(jsonText);
+
+          const correctAnswerStr = `${word1.word} & ${word2.word}`;
+
+          const optionsSet = new Set([correctAnswerStr]);
+          while (optionsSet.size < 5) {
+            const r1 = allWords[Math.floor(Math.random() * allWords.length)].word;
+            const r2 = allWords[Math.floor(Math.random() * allWords.length)].word;
+            if (r1 !== r2 && `${r1} & ${r2}` !== correctAnswerStr) {
+              optionsSet.add(`${r1} & ${r2}`);
+            }
+          }
+
+          const options = Array.from(optionsSet).sort(() => 0.5 - Math.random());
+
+          return {
+            mode: 'double',
+            targets: [word1, word2],
+            correctAnswer: correctAnswerStr,
+            sentence: parsed.sentence || `The detective noticed a (____1____) clue during the (____2____).`,
+            explanation: parsed.explanation || `"${word1.word}" and "${word2.word}" complete the story!`,
+            options: options
+          };
+        } catch (err) {
+          const correctAnswerStr = `${word1.word} & ${word2.word}`;
+          const optionsSet = new Set([correctAnswerStr]);
+          while (optionsSet.size < 5) {
+            const r1 = allWords[Math.floor(Math.random() * allWords.length)].word;
+            const r2 = allWords[Math.floor(Math.random() * allWords.length)].word;
+            if (r1 !== r2) optionsSet.add(`${r1} & ${r2}`);
+          }
+          return {
+            mode: 'double',
+            targets: [word1, word2],
+            correctAnswer: correctAnswerStr,
+            sentence: `The agent found a (____1____) detail in the opponent's (____2____).`,
+            explanation: `"${word1.word}" and "${word2.word}" fit perfectly here!`,
+            options: Array.from(optionsSet).sort(() => 0.5 - Math.random())
+          };
+        }
+      } else {
+        const targetItem = targetItems[0];
+        const distractors = allWords
+          .filter(w => w.word !== targetItem.word)
+          .sort(() => 0.5 - Math.random())
+          .slice(0, 3)
+          .map(w => w.word);
+
+        const prompt = `Create a fill-in-the-blank English sentence for a 12-year-old kid.
+Target Word: "${targetItem.word}" (Meaning: ${targetItem.meaning}).
+
+Respond strictly in valid JSON format:
+{
+  "sentence": "Sentence with (_____) replacing the target word.",
+  "explanation": "Brief kid-friendly explanation."
+}`;
+
+        try {
+          const payload = {
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { responseMimeType: "application/json" }
+          };
+          const response = await fetch(apiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          const data = await response.json();
+          const jsonText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+          const parsed = JSON.parse(jsonText);
+          const options = [...distractors, targetItem.word].sort(() => 0.5 - Math.random());
+
+          return {
+            mode: 'single',
+            targets: [targetItem],
+            correctAnswer: targetItem.word,
+            sentence: parsed.sentence || `The team found a (_____) clue in the secret room.`,
+            explanation: parsed.explanation || `"${targetItem.word}" fits this context!`,
+            options: options
+          };
+        } catch (err) {
+          const options = [...distractors, targetItem.word].sort(() => 0.5 - Math.random());
+          return {
+            mode: 'single',
+            targets: [targetItem],
+            correctAnswer: targetItem.word,
+            sentence: `The action was considered completely (_____).`,
+            explanation: `"${targetItem.word}" fits best here!`,
+            options: options
+          };
+        }
+      }
+    }
+
+    // Helper: AI Auto Meaning Lookup
+    async function fetchMeaningForWord(wordText) {
+      const apiKey = "";
+      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+
+      const prompt = `Provide a simple, concise 12-year-old kid friendly English meaning/definition for the vocabulary word "${wordText}".
+Respond strictly in valid JSON format:
+{
+  "meaning": "simple definition here"
+}`;
+
+      try {
+        const payload = {
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { responseMimeType: "application/json" }
+        };
+        const response = await fetch(apiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await response.json();
+        const jsonText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+        const parsed = JSON.parse(jsonText);
+        return parsed.meaning || "a vocabulary word";
+      } catch (err) {
+        return "a vocabulary word";
+      }
+    }
+
+    function App() {
+      const [words, setWords] = useState(() => {
+        const saved = localStorage.getItem("vocab_words_100");
+        return saved ? JSON.parse(saved) : DEFAULT_WORDS;
+      });
+
+      const [user, setUser] = useState(null);
+      const [isSyncing, setIsSyncing] = useState(true);
+
+      const [score, setScore] = useState(0);
+      const [highScore, setHighScore] = useState(() => {
+        return parseInt(localStorage.getItem("vocab_high_score") || "0", 10);
+      });
+
+      const [quickWordInput, setQuickWordInput] = useState('');
+      const [isAddingWord, setIsAddingWord] = useState(false);
+
+      const [mode, setMode] = useState('home');
+      const [selectedQuizMode, setSelectedQuizMode] = useState('single');
+
+      const [quizQuestions, setQuizQuestions] = useState([]);
+      const [currentIdx, setCurrentIdx] = useState(0);
+      const [selectedOption, setSelectedOption] = useState(null);
+      const [isCorrect, setIsCorrect] = useState(null);
+      const [loadingProgress, setLoadingProgress] = useState(0);
+
+      const summaryRef = useRef(null);
+
+      useEffect(() => {
+        let unsubscribeSnapshot = null;
+        let isMounted = true;
+
+        async function initCloudSync() {
+          try {
+            if (!window.firebaseServices) return;
+            const { initializeApp, getAuth, signInAnonymously, signInWithCustomToken, getFirestore, doc, setDoc, onSnapshot } = window.firebaseServices;
+
+            const appId = typeof __app_id !== 'undefined' ? __app_id : 'vocab-quiz-app';
+            const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+
+            if (!firebaseConfig) {
+              if (isMounted) setIsSyncing(false);
+              return;
+            }
+
+            const app = initializeApp(firebaseConfig);
+            const auth = getAuth(app);
+            const db = getFirestore(app);
+
+            let currentUser = null;
+            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+              const userCred = await signInWithCustomToken(auth, __initial_auth_token);
+              currentUser = userCred.user;
+            } else {
+              const userCred = await signInAnonymously(auth);
+              currentUser = userCred.user;
+            }
+
+            if (isMounted) setUser(currentUser);
+
+            if (currentUser) {
+              const vocabDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'vocab', 'wordList');
+
+              unsubscribeSnapshot = onSnapshot(vocabDocRef, (snapshot) => {
+                if (snapshot.exists() && snapshot.data()?.list) {
+                  const cloudList = snapshot.data().list;
+                  if (isMounted) {
+                    setWords(cloudList);
+                    localStorage.setItem("vocab_words_100", JSON.stringify(cloudList));
+                  }
+                } else {
+                  setDoc(vocabDocRef, { list: DEFAULT_WORDS }).catch(console.error);
+                }
+                if (isMounted) setIsSyncing(false);
+              }, (err) => {
+                console.error("Firestore sync error:", err);
+                if (isMounted) setIsSyncing(false);
+              });
+            }
+          } catch (error) {
+            console.error("Firebase init failed:", error);
+            if (isMounted) setIsSyncing(false);
+          }
+        }
+
+        initCloudSync();
+
+        return () => {
+          isMounted = false;
+          if (unsubscribeSnapshot) unsubscribeSnapshot();
+        };
+      }, []);
+
+      const updateWordList = async (newList) => {
+        setWords(newList);
+        localStorage.setItem("vocab_words_100", JSON.stringify(newList));
+
+        try {
+          if (window.firebaseServices && user) {
+            const { getFirestore, doc, setDoc } = window.firebaseServices;
+            const appId = typeof __app_id !== 'undefined' ? __app_id : 'vocab-quiz-app';
+            const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+            if (firebaseConfig) {
+              const app = window.firebaseServices.initializeApp(firebaseConfig);
+              const db = getFirestore(app);
+              const vocabDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'vocab', 'wordList');
+              await setDoc(vocabDocRef, { list: newList });
+            }
+          }
+        } catch (err) {
+          console.error("Cloud save failed, saved locally:", err);
+        }
+      };
+
+      const handleAddQuickWord = async (e) => {
+        e.preventDefault();
+        const trimmed = quickWordInput.trim();
+        if (!trimmed) return;
+
+        setIsAddingWord(true);
+        const autoMeaning = await fetchMeaningForWord(trimmed);
+
+        const newEntry = {
+          id: Date.now(),
+          word: trimmed,
+          meaning: autoMeaning
+        };
+
+        await updateWordList([newEntry, ...words]);
+        setQuickWordInput('');
+        setIsAddingWord(false);
+      };
+
+      useEffect(() => {
+        if (window.lucide) window.lucide.createIcons();
+      });
+
+      const speak = (text, e) => {
+        if (e) e.stopPropagation();
+        if ('speechSynthesis' in window) {
+          window.speechSynthesis.cancel();
+          const utterance = new SpeechSynthesisUtterance(text);
+          utterance.lang = 'en-US';
+          utterance.rate = 0.85;
+          window.speechSynthesis.speak(utterance);
+        }
+      };
+
+      const startQuiz = async (quizType = 'single') => {
+        if (words.length < 5) {
+          alert("Please add at least 5 words to start the quiz!");
+          return;
+        }
+
+        setSelectedQuizMode(quizType);
+        setMode('loading');
+        setLoadingProgress(0);
+
+        const questionsArr = [];
+        for (let i = 0; i < 10; i++) {
+          if (quizType === 'double') {
+            const shuffled = [...words].sort(() => 0.5 - Math.random());
+            const targets = [shuffled[0], shuffled[1]];
+            const q = await fetchAIQuestion(targets, words, 'double');
+            questionsArr.push(q);
+          } else {
+            const shuffled = [...words].sort(() => 0.5 - Math.random());
+            const targets = [shuffled[0]];
+            const q = await fetchAIQuestion(targets, words, 'single');
+            questionsArr.push(q);
+          }
+          setLoadingProgress(Math.round(((i + 1) / 10) * 100));
+        }
+
+        setQuizQuestions(questionsArr);
+        setCurrentIdx(0);
+        setScore(0);
+        setSelectedOption(null);
+        setIsCorrect(null);
+        setMode('quiz');
+      };
+
+      const handleSelectOption = (option) => {
+        if (selectedOption !== null) return;
+
+        const currentQ = quizQuestions[currentIdx];
+        const correct = option === currentQ.correctAnswer;
+
+        setSelectedOption(option);
+        setIsCorrect(correct);
+
+        if (correct) {
+          setScore(prev => {
+            const newScore = prev + 10;
+            if (newScore > highScore) {
+              setHighScore(newScore);
+              localStorage.setItem("vocab_high_score", newScore.toString());
+            }
+            return newScore;
+          });
+        }
+      };
+
+      const handleNextQuestion = () => {
+        if (currentIdx + 1 < quizQuestions.length) {
+          setCurrentIdx(prev => prev + 1);
+          setSelectedOption(null);
+          setIsCorrect(null);
+        } else {
+          setMode('summary');
+          if (score >= 80) {
+            confetti({ particleCount: 180, spread: 90, origin: { y: 0.6 } });
+          }
+        }
+      };
+
+      const handleSaveScreenshot = async () => {
+        if (summaryRef.current) {
+          try {
+            const canvas = await html2canvas(summaryRef.current, { scale: 2 });
+            const image = canvas.toDataURL("image/png");
+
+            const link = document.createElement("a");
+            link.href = image;
+            link.download = `Quiz_Result_${score}PTS.png`;
+            link.click();
+          } catch (err) {
+            console.error("Screenshot Error", err);
+            alert("Failed to capture screenshot!");
+          }
+        }
+      };
+
+      return (
+        <div className="max-w-lg mx-auto min-h-screen flex flex-col justify-between p-4 sm:p-6">
+          {/* Header */}
+          <header className="flex justify-between items-center bg-white/90 backdrop-blur-md p-4 rounded-3xl shadow-sm border border-indigo-100">
+            <button 
+              onClick={() => setMode('home')}
+              className="flex items-center space-x-2 font-black text-xl text-indigo-600 hover:scale-105 transition"
+            >
+              <span className="text-2xl">⚡</span>
+              <span className="font-fun">VocabQuest</span>
+            </button>
+
+            <div className="flex items-center space-x-3">
+              <div 
+                className={`text-xs font-bold px-2.5 py-1 rounded-full flex items-center space-x-1 ${isSyncing ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}`}
+                title={isSyncing ? "Connecting to Cloud..." : "Synced with Cloud"}
+              >
+                <span>{isSyncing ? "🔄" : "☁️"}</span>
+                <span className="hidden sm:inline">{isSyncing ? "Syncing..." : "Cloud Active"}</span>
+              </div>
+
+              <div className="bg-amber-100 border border-amber-300 text-amber-900 font-extrabold px-3 py-1 rounded-full text-sm flex items-center space-x-1 shadow-sm">
+                <span>⭐</span>
+                <span>{score} PTS</span>
+              </div>
+
+              <button 
+                onClick={() => setMode('manage')}
+                className="p-2 rounded-2xl bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition"
+                title="Manage All Words"
+              >
+                <i data-lucide="book-open" className="w-5 h-5"></i>
+              </button>
+            </div>
+          </header>
+
+          {/* Main Body */}
+          <main className="my-auto py-6">
+
+            {/* 1. HOME SCREEN */}
+            {mode === 'home' && (
+              <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-xl border border-slate-100 space-y-6 text-center animate-pop">
+                <div className="inline-block p-4 bg-indigo-50 rounded-full text-4xl">
+                  🕵️‍♂️
+                </div>
+                <div>
+                  <h1 className="text-3xl font-black text-slate-800 mb-2 font-fun">Vocab Detective Challenge</h1>
+                  <p className="text-sm text-slate-500">Master vocabulary words with fun AI generated stories!</p>
+                </div>
+
+                {/* Quick Add Word Box on Main Screen */}
+                <form onSubmit={handleAddQuickWord} className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 text-left space-y-2">
+                  <label className="text-xs font-black text-indigo-600 uppercase tracking-wider flex items-center justify-between">
+                    <span>➕ Add New Word (AI Auto Definition):</span>
+                  </label>
+                  <div className="flex space-x-2">
+                    <input 
+                      type="text" 
+                      placeholder="Type a word (e.g. Mysterious)"
+                      value={quickWordInput}
+                      onChange={(e) => setQuickWordInput(e.target.value)}
+                      disabled={isAddingWord}
+                      className="w-full p-2.5 text-sm rounded-xl border border-slate-300 focus:outline-indigo-500 font-bold"
+                    />
+                    <button
+                      type="submit"
+                      disabled={isAddingWord || !quickWordInput.trim()}
+                      className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white font-extrabold text-sm rounded-xl transition flex items-center justify-center min-w-[70px]"
+                    >
+                      {isAddingWord ? "AI..." : "Add"}
+                    </button>
+                  </div>
+                </form>
+
+                {/* Mode Selector */}
+                <div className="space-y-3 pt-1">
+                  <button 
+                    onClick={() => startQuiz('single')}
+                    className="w-full py-4 px-6 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold rounded-2xl shadow-lg shadow-indigo-200 transition transform active:scale-95 flex items-center justify-between"
+                  >
+                    <div className="text-left">
+                      <div className="text-base">1 Blank Mode</div>
+                      <div className="text-xs text-indigo-200 font-normal">Choose 1 correct word (4 options)</div>
+                    </div>
+                    <span className="text-2xl">🎯</span>
+                  </button>
+
+                  <button 
+                    onClick={() => startQuiz('double')}
+                    className="w-full py-4 px-6 bg-purple-600 hover:bg-purple-700 text-white font-extrabold rounded-2xl shadow-lg shadow-purple-200 transition transform active:scale-95 flex items-center justify-between"
+                  >
+                    <div className="text-left">
+                      <div className="text-base">2 Blanks Challenge</div>
+                      <div className="text-xs text-purple-200 font-normal">Find 2 matching words (5 options)</div>
+                    </div>
+                    <span className="text-2xl">🚀</span>
+                  </button>
+                </div>
+
+                <div className="text-xs font-bold text-slate-400 flex justify-between items-center px-2">
+                  <span>📚 Total Words: {words.length}</span>
+                  <span>🏆 High Score: {highScore} PTS</span>
+                </div>
+              </div>
+            )}
+
+            {/* 2. LOADING AI QUESTIONS */}
+            {mode === 'loading' && (
+              <div className="bg-white rounded-3xl p-8 shadow-xl text-center space-y-6 animate-pop">
+                <div className="text-5xl animate-bounce">🤖</div>
+                <div>
+                  <h2 className="text-xl font-black text-slate-800 font-fun">Generating AI Questions...</h2>
+                  <p className="text-xs text-slate-500 mt-1">Creating 10 customized stories for 12-year-olds!</p>
+                </div>
+                <div className="w-full bg-slate-100 rounded-full h-4 overflow-hidden p-0.5 border">
+                  <div 
+                    className="bg-indigo-600 h-full rounded-full transition-all duration-300"
+                    style={{ width: `${loadingProgress}%` }}
+                  ></div>
+                </div>
+                <p className="text-sm font-bold text-indigo-600">{loadingProgress}% Completed</p>
+              </div>
+            )}
+
+            {/* 3. QUIZ SCREEN */}
+            {mode === 'quiz' && quizQuestions.length > 0 && (
+              <div className="bg-white rounded-3xl p-6 shadow-xl border border-slate-100 space-y-6 animate-pop">
+                {/* Progress bar */}
+                <div className="flex justify-between items-center text-xs font-bold text-slate-400">
+                  <span>QUESTION {currentIdx + 1} OF 10</span>
+                  <span>{selectedQuizMode === 'double' ? '5 Options' : '4 Options'}</span>
+                </div>
+
+                {/* Sentence */}
+                <div className="bg-indigo-50/70 p-5 rounded-2xl border border-indigo-100 leading-relaxed text-slate-800 font-bold text-lg">
+                  "{quizQuestions[currentIdx].sentence}"
+                </div>
+
+                {/* Options List with Speaker Icon */}
+                <div className="space-y-2.5">
+                  {quizQuestions[currentIdx].options.map((option, idx) => {
+                    let btnStyle = "bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200";
+
+                    if (selectedOption !== null) {
+                      if (option === quizQuestions[currentIdx].correctAnswer) {
+                        btnStyle = "bg-emerald-500 text-white border-emerald-600 font-black";
+                      } else if (option === selectedOption) {
+                        btnStyle = "bg-rose-500 text-white border-rose-600 font-black";
+                      } else {
+                        btnStyle = "bg-slate-50 text-slate-300 border-slate-100 opacity-50";
+                      }
+                    }
+
+                    return (
+                      <div key={idx} className="flex items-center space-x-2">
+                        <button
+                          onClick={() => handleSelectOption(option)}
+                          disabled={selectedOption !== null}
+                          className={`flex-grow p-4 text-left font-extrabold rounded-2xl border-2 transition transform active:scale-98 text-sm ${btnStyle}`}
+                        >
+                          {option}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => speak(option, e)}
+                          className="p-3 bg-slate-100 hover:bg-indigo-100 text-indigo-600 rounded-2xl border border-slate-200 transition active:scale-95 flex-shrink-0"
+                          title="Listen pronunciation"
+                        >
+                          🔊
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Feedback & Explanation */}
+                {selectedOption !== null && (
+                  <div className={`p-4 rounded-2xl border space-y-2 ${isCorrect ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 'bg-rose-50 border-rose-200 text-rose-900'}`}>
+                    <div className="flex items-center space-x-2 font-black text-base">
+                      <span>{isCorrect ? '🎉 Correct!' : '❌ Oops!'}</span>
+                    </div>
+                    <p className="text-xs leading-normal font-semibold">
+                      💡 <b>Explanation:</b> {quizQuestions[currentIdx].explanation}
+                    </p>
+                    <button
+                      onClick={handleNextQuestion}
+                      className="w-full mt-2 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-sm rounded-xl shadow-md transition"
+                    >
+                      {currentIdx + 1 === quizQuestions.length ? "See Final Score 🏆" : "Next Question ➔"}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* 4. RESULT SUMMARY */}
+            {mode === 'summary' && (
+              <div className="space-y-4 animate-pop">
+                <div ref={summaryRef} className="bg-white rounded-3xl p-6 sm:p-8 shadow-xl border border-slate-100 text-center space-y-6">
+                  <div className="text-6xl">
+                    {score >= 80 ? "🏆" : "💪"}
+                  </div>
+
+                  <div>
+                    <h2 className="text-2xl font-black text-slate-800 font-fun">
+                      {score >= 80 ? "Awesome Job! You Passed!" : "Keep Practicing!"}
+                    </h2>
+                    <p className="text-xs font-bold text-slate-400 mt-1">
+                      {score >= 80 ? "You're a Vocabulary Master!" : "You're almost there, try again!"}
+                    </p>
+                  </div>
+
+                  <div className="bg-gradient-to-r from-indigo-50 to-purple-50 p-6 rounded-2xl border border-indigo-100 inline-block w-full">
+                    <div className="text-xs font-black text-indigo-400 uppercase tracking-wider">Final Score</div>
+                    <div className="text-5xl font-black text-indigo-600 my-1 font-fun">{score} / 100</div>
+                    <div className="text-xs font-bold text-slate-500">
+                      {score >= 80 ? "STATUS: PASS (80+ PTS)" : "STATUS: TRY AGAIN"}
+                    </div>
+                  </div>
+
+                  <div className="text-xs text-slate-400 font-semibold">
+                    Completed 10 questions using AI VocabQuest.
+                  </div>
+                </div>
+
+                {/* Save Screenshot Button */}
+                <button
+                  onClick={handleSaveScreenshot}
+                  className="w-full py-4 px-6 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-sm rounded-2xl shadow-lg shadow-indigo-200 transition transform active:scale-95 flex items-center justify-center space-x-2"
+                >
+                  <i data-lucide="camera" className="w-5 h-5"></i>
+                  <span>📸 Save Result Screenshot</span>
+                </button>
+
+                <button
+                  onClick={() => setMode('home')}
+                  className="w-full py-3.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold text-sm rounded-2xl transition"
+                >
+                  Back to Home
+                </button>
+              </div>
+            )}
+
+            {/* 5. MANAGE & ADD WORDS */}
+            {mode === 'manage' && (
+              <WordManager 
+                words={words} 
+                onUpdateWords={updateWordList} 
+                onBack={() => setMode('home')}
+                onReset={() => {
+                  if (confirm("Reset to default 100 vocabulary words on all synced devices?")) {
+                    updateWordList(DEFAULT_WORDS);
+                  }
+                }}
+              />
+            )}
+
+          </main>
+        </div>
+      );
+    }
+
+    // Sub-component: Word Manager
+    function WordManager({ words, onUpdateWords, onBack, onReset }) {
+      const [newWord, setNewWord] = useState('');
+      const [isLoadingMeaning, setIsLoadingMeaning] = useState(false);
+
+      const handleAdd = async (e) => {
+        e.preventDefault();
+        const trimmed = newWord.trim();
+        if (!trimmed) return;
+
+        setIsLoadingMeaning(true);
+        const autoMeaning = await fetchMeaningForWord(trimmed);
+
+        const item = {
+          id: Date.now(),
+          word: trimmed,
+          meaning: autoMeaning
+        };
+
+        await onUpdateWords([item, ...words]);
+        setNewWord('');
+        setIsLoadingMeaning(false);
+      };
+
+      const handleDelete = (id) => {
+        onUpdateWords(words.filter(w => w.id !== id));
+      };
+
+      return (
+        <div className="bg-white rounded-3xl p-6 shadow-xl border border-slate-100 space-y-6 animate-pop">
+          <div className="flex justify-between items-center">
+            <h2 className="text-xl font-black text-slate-800 flex items-center space-x-2 font-fun">
+              <span>📚 Vocabulary List</span>
+            </h2>
+            <button onClick={onBack} className="text-sm font-bold text-indigo-600 hover:underline">
+              ← Back
+            </button>
+          </div>
+
+          {/* Add Word Form */}
+          <form onSubmit={handleAdd} className="space-y-3 bg-indigo-50 p-4 rounded-2xl border border-indigo-100">
+            <h3 className="text-xs font-bold text-indigo-900 uppercase tracking-wider">Add Custom Word (Auto AI Meaning)</h3>
+            <div className="flex space-x-2">
+              <input 
+                type="text" 
+                placeholder="Type word (e.g. Mysterious)"
+                value={newWord}
+                onChange={e => setNewWord(e.target.value)}
+                disabled={isLoadingMeaning}
+                className="w-full p-2.5 text-sm rounded-xl border border-slate-200 focus:outline-indigo-500 font-bold"
+              />
+              <button 
+                type="submit"
+                disabled={isLoadingMeaning || !newWord.trim()}
+                className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white font-extrabold text-sm rounded-xl shadow-sm whitespace-nowrap"
+              >
+                {isLoadingMeaning ? "AI Processing..." : "+ Add Word"}
+              </button>
+            </div>
+          </form>
+
+          {/* Word List Header & Reset */}
+          <div className="flex justify-between items-center border-b pb-2">
+            <span className="text-xs font-bold text-slate-400">Total {words.length} Words</span>
+            <button onClick={onReset} className="text-xs text-rose-500 font-bold hover:underline">
+              Reset Default 100 Words
+            </button>
+          </div>
+
+          {/* Word List View */}
+          <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+            {words.map((w) => (
+              <div key={w.id} className="flex justify-between items-center p-3 bg-slate-50 rounded-xl border border-slate-100 text-sm">
+                <div>
+                  <span className="font-black text-slate-800 mr-2">{w.word}</span>
+                  <span className="text-slate-500 text-xs">({w.meaning})</span>
+                </div>
+                <button 
+                  onClick={() => handleDelete(w.id)}
+                  className="text-slate-300 hover:text-rose-500 transition p-1"
+                  title="Delete Word"
+                >
+                  <i data-lucide="trash-2" className="w-4 h-4"></i>
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    // Mount App
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
