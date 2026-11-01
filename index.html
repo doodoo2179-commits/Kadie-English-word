@@ -170,8 +170,8 @@
     ];
 
     // Helper: Gemini API Generator (Single & Double Blanks)
-    async function fetchAIQuestion(targetItems, allWords, quizMode) {
-      const apiKey = "";
+    async function fetchAIQuestion(targetItems, allWords, quizMode, userApiKey = '') {
+      const apiKey = userApiKey || "";
       const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
 
       if (quizMode === 'double') {
@@ -254,7 +254,7 @@ Target Word: "${targetItem.word}" (Meaning: ${targetItem.meaning}).
 Respond strictly in valid JSON format:
 {
   "sentence": "Sentence with (_____) replacing the target word.",
-  "explanation": "Brief kid-friendly explanation."
+  "explanation": "Brief kid-friendly explanation why this word fits."
 }`;
 
         try {
@@ -276,7 +276,7 @@ Respond strictly in valid JSON format:
             mode: 'single',
             targets: [targetItem],
             correctAnswer: targetItem.word,
-            sentence: parsed.sentence || `The team found a (_____) clue in the secret room.`,
+            sentence: parsed.sentence || `The detective found a (_____) clue in the hidden room.`,
             explanation: parsed.explanation || `"${targetItem.word}" fits this context!`,
             options: options
           };
@@ -286,8 +286,8 @@ Respond strictly in valid JSON format:
             mode: 'single',
             targets: [targetItem],
             correctAnswer: targetItem.word,
-            sentence: `The action was considered completely (_____).`,
-            explanation: `"${targetItem.word}" fits best here!`,
+            sentence: `The detective carefully inspected the (_____) clue at the scene.`,
+            explanation: `"${targetItem.word}" means ${targetItem.meaning}.`,
             options: options
           };
         }
@@ -295,8 +295,8 @@ Respond strictly in valid JSON format:
     }
 
     // Helper: AI Auto Meaning Lookup
-    async function fetchMeaningForWord(wordText) {
-      const apiKey = "";
+    async function fetchMeaningForWord(wordText, userApiKey = '') {
+      const apiKey = userApiKey || "";
       const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
 
       const prompt = `Provide a simple, concise 12-year-old kid friendly English meaning/definition for the vocabulary word "${wordText}".
@@ -329,6 +329,11 @@ Respond strictly in valid JSON format:
         const saved = localStorage.getItem("vocab_words_100");
         return saved ? JSON.parse(saved) : DEFAULT_WORDS;
       });
+
+      const [apiKeyInput, setApiKeyInput] = useState(() => {
+        return localStorage.getItem("gemini_user_api_key") || "";
+      });
+      const [showApiKeyModal, setShowApiKeyModal] = useState(false);
 
       const [user, setUser] = useState(null);
       const [isSyncing, setIsSyncing] = useState(true);
@@ -482,17 +487,19 @@ Respond strictly in valid JSON format:
         setMode('loading');
         setLoadingProgress(0);
 
+        const currentApiKey = localStorage.getItem("gemini_user_api_key") || "";
+
         const questionsArr = [];
         for (let i = 0; i < 10; i++) {
           if (quizType === 'double') {
             const shuffled = [...words].sort(() => 0.5 - Math.random());
             const targets = [shuffled[0], shuffled[1]];
-            const q = await fetchAIQuestion(targets, words, 'double');
+            const q = await fetchAIQuestion(targets, words, 'double', currentApiKey);
             questionsArr.push(q);
           } else {
             const shuffled = [...words].sort(() => 0.5 - Math.random());
             const targets = [shuffled[0]];
-            const q = await fetchAIQuestion(targets, words, 'single');
+            const q = await fetchAIQuestion(targets, words, 'single', currentApiKey);
             questionsArr.push(q);
           }
           setLoadingProgress(Math.round(((i + 1) / 10) * 100));
@@ -569,13 +576,21 @@ Respond strictly in valid JSON format:
               <span className="font-fun">VocabQuest</span>
             </button>
 
-            <div className="flex items-center space-x-3">
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => setShowApiKeyModal(true)}
+                className={`text-xs font-black px-2.5 py-1.5 rounded-full border flex items-center space-x-1 ${apiKeyInput ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-rose-50 border-rose-200 text-rose-700 font-extrabold animate-pulse'}`}
+                title="Set Gemini API Key for AI features"
+              >
+                <span>🔑</span>
+                <span>{apiKeyInput ? "AI Ready" : "Set API Key"}</span>
+              </button>
+
               <div 
                 className={`text-xs font-bold px-2.5 py-1 rounded-full flex items-center space-x-1 ${isSyncing ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}`}
                 title={isSyncing ? "Connecting to Cloud..." : "Synced with Cloud"}
               >
                 <span>{isSyncing ? "🔄" : "☁️"}</span>
-                <span className="hidden sm:inline">{isSyncing ? "Syncing..." : "Cloud Active"}</span>
               </div>
 
               <div className="bg-amber-100 border border-amber-300 text-amber-900 font-extrabold px-3 py-1 rounded-full text-sm flex items-center space-x-1 shadow-sm">
@@ -593,71 +608,116 @@ Respond strictly in valid JSON format:
             </div>
           </header>
 
-          {/* Main Body */}
-          <main className="my-auto py-6">
+          {/* API Key Modal */}
+          {showApiKeyModal && (
+            <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+              <div className="bg-white rounded-3xl p-6 max-w-sm w-full space-y-4 shadow-2xl animate-pop border border-slate-100">
+                <div className="flex justify-between items-center">
+                  <h3 className="font-black text-lg text-slate-800 font-fun flex items-center space-x-2">
+                    <span>🔑 Gemini API Key</span>
+                  </h3>
+                  <button onClick={() => setShowApiKeyModal(false)} className="text-slate-400 hover:text-slate-600 font-bold">✕</button>
+                </div>
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  Enter your free Gemini API key to activate AI-generated story questions and explanations on Vercel!
+                </p>
+                <input 
+                  type="password"
+                  placeholder="Paste AI Studio API Key here"
+                  value={apiKeyInput}
+                  onChange={(e) => setApiKeyInput(e.target.value)}
+                  className="w-full p-3 text-xs rounded-xl border border-slate-300 font-mono focus:outline-indigo-500"
+                />
+                <div className="flex space-x-2">
+                  <button
+                    onClick={() => {
+                      localStorage.setItem("gemini_user_api_key", apiKeyInput.trim());
+                      setShowApiKeyModal(false);
+                    }}
+                    className="w-full py-2.5 bg-indigo-600 text-white font-extrabold rounded-xl text-sm hover:bg-indigo-700 transition"
+                  >
+                    Save Key
+                  </button>
+                </div>
+                <div className="text-center">
+                  <a 
+                    href="https://aistudio.google.com/app/apikey" 
+                    target="_blank" 
+                    rel="noreferrer" 
+                    className="text-xs text-indigo-600 font-bold hover:underline"
+                  >
+                    👉 Get Free API Key at Google AI Studio
+                  </a>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Main Area */}
+          <main className="flex-1 my-6 flex flex-col justify-center">
 
             {/* 1. HOME SCREEN */}
             {mode === 'home' && (
-              <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-xl border border-slate-100 space-y-6 text-center animate-pop">
-                <div className="inline-block p-4 bg-indigo-50 rounded-full text-4xl">
-                  🕵️‍♂️
-                </div>
-                <div>
-                  <h1 className="text-3xl font-black text-slate-800 mb-2 font-fun">Vocab Detective Challenge</h1>
-                  <p className="text-sm text-slate-500">Master vocabulary words with fun AI generated stories!</p>
+              <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-xl border border-slate-100 space-y-6 animate-pop text-center">
+                <div className="space-y-2">
+                  <span className="inline-block px-3 py-1 bg-indigo-100 text-indigo-700 font-extrabold text-xs rounded-full uppercase tracking-wider">
+                    Vocabulary Quiz Game for Kids
+                  </span>
+                  <h1 className="text-3xl font-black text-slate-800 font-fun">Master Your Words!</h1>
+                  <p className="text-slate-500 text-xs font-semibold max-w-xs mx-auto">
+                    AI generates fun story questions based on your study list!
+                  </p>
                 </div>
 
-                {/* Quick Add Word Box on Main Screen */}
-                <form onSubmit={handleAddQuickWord} className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 text-left space-y-2">
-                  <label className="text-xs font-black text-indigo-600 uppercase tracking-wider flex items-center justify-between">
-                    <span>➕ Add New Word (AI Auto Definition):</span>
-                  </label>
+                {/* Quick Add Word Form */}
+                <form onSubmit={handleAddQuickWord} className="bg-slate-50 p-4 rounded-2xl border border-slate-200 text-left space-y-2">
+                  <label className="text-xs font-black text-slate-600 block">⚡ Quick Add New Word (AI Auto-Meaning)</label>
                   <div className="flex space-x-2">
                     <input 
                       type="text" 
-                      placeholder="Type a word (e.g. Mysterious)"
+                      placeholder="e.g. Mysterious"
                       value={quickWordInput}
                       onChange={(e) => setQuickWordInput(e.target.value)}
                       disabled={isAddingWord}
-                      className="w-full p-2.5 text-sm rounded-xl border border-slate-300 focus:outline-indigo-500 font-bold"
+                      className="w-full p-2.5 text-xs rounded-xl border border-slate-300 font-bold focus:outline-indigo-500"
                     />
-                    <button
+                    <button 
                       type="submit"
                       disabled={isAddingWord || !quickWordInput.trim()}
-                      className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white font-extrabold text-sm rounded-xl transition flex items-center justify-center min-w-[70px]"
+                      className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white font-black text-xs rounded-xl transition whitespace-nowrap"
                     >
-                      {isAddingWord ? "AI..." : "Add"}
+                      {isAddingWord ? "AI..." : "+ Add"}
                     </button>
                   </div>
                 </form>
 
-                {/* Mode Selector */}
-                <div className="space-y-3 pt-1">
-                  <button 
+                {/* Quiz Mode Buttons */}
+                <div className="space-y-3 pt-2">
+                  <button
                     onClick={() => startQuiz('single')}
                     className="w-full py-4 px-6 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold rounded-2xl shadow-lg shadow-indigo-200 transition transform active:scale-95 flex items-center justify-between"
                   >
                     <div className="text-left">
-                      <div className="text-base">1 Blank Mode</div>
-                      <div className="text-xs text-indigo-200 font-normal">Choose 1 correct word (4 options)</div>
+                      <div className="font-fun text-base">Single Blank Quiz</div>
+                      <div className="text-xs font-normal opacity-80">1 Blank • 4 Choice Options</div>
                     </div>
-                    <span className="text-2xl">🎯</span>
+                    <span className="text-xl">🚀</span>
                   </button>
 
-                  <button 
+                  <button
                     onClick={() => startQuiz('double')}
                     className="w-full py-4 px-6 bg-purple-600 hover:bg-purple-700 text-white font-extrabold rounded-2xl shadow-lg shadow-purple-200 transition transform active:scale-95 flex items-center justify-between"
                   >
                     <div className="text-left">
-                      <div className="text-base">2 Blanks Challenge</div>
-                      <div className="text-xs text-purple-200 font-normal">Find 2 matching words (5 options)</div>
+                      <div className="font-fun text-base">Double Blanks Challenge</div>
+                      <div className="text-xs font-normal opacity-80">2 Blanks • 5 Choice Options</div>
                     </div>
-                    <span className="text-2xl">🚀</span>
+                    <span className="text-xl">🔥</span>
                   </button>
                 </div>
 
-                <div className="text-xs font-bold text-slate-400 flex justify-between items-center px-2">
-                  <span>📚 Total Words: {words.length}</span>
+                <div className="text-xs text-slate-400 font-bold flex justify-between items-center px-1">
+                  <span>📚 Total {words.length} Words</span>
                   <span>🏆 High Score: {highScore} PTS</span>
                 </div>
               </div>
