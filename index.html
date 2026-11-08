@@ -503,16 +503,18 @@ Respond strictly in valid JSON format:
                 if (snapshot.exists() && snapshot.data()?.list) {
                   const cloudList = snapshot.data().list;
                   if (isMounted) {
-                    // Combine default words with cloud list to never lose added words
+                    // Always combine DEFAULT_WORDS with Cloud List to guarantee all added words are present everywhere
                     const wordMap = new Map();
                     DEFAULT_WORDS.forEach(w => wordMap.set(w.word.toLowerCase(), w));
                     cloudList.forEach(w => wordMap.set(w.word.toLowerCase(), w));
                     const merged = Array.from(wordMap.values()).sort((a, b) => a.word.localeCompare(b.word));
 
                     setWords(merged);
+                    // Force-overwrite local cache with the newly updated merged cloud list
                     localStorage.setItem("vocab_words_100", JSON.stringify(merged));
                   }
                 } else {
+                  // If cloud list is empty, initialize it with DEFAULT_WORDS
                   setDoc(vocabDocRef, { list: DEFAULT_WORDS }).catch(console.error);
                 }
                 if (isMounted) setIsSyncing(false);
