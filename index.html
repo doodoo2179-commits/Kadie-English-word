@@ -422,7 +422,19 @@ Respond strictly in valid JSON format:
     function App() {
       const [words, setWords] = useState(() => {
         const saved = localStorage.getItem("vocab_words_100");
-        return saved ? JSON.parse(saved) : DEFAULT_WORDS;
+        if (saved) {
+          try {
+            const parsed = JSON.parse(saved);
+            // Merge defaults and saved unique words by word text
+            const wordMap = new Map();
+            DEFAULT_WORDS.forEach(w => wordMap.set(w.word.toLowerCase(), w));
+            parsed.forEach(w => wordMap.set(w.word.toLowerCase(), w));
+            return Array.from(wordMap.values()).sort((a, b) => a.word.localeCompare(b.word));
+          } catch (e) {
+            return DEFAULT_WORDS;
+          }
+        }
+        return DEFAULT_WORDS;
       });
 
       const [apiKeyInput, setApiKeyInput] = useState(() => {
@@ -491,8 +503,14 @@ Respond strictly in valid JSON format:
                 if (snapshot.exists() && snapshot.data()?.list) {
                   const cloudList = snapshot.data().list;
                   if (isMounted) {
-                    setWords(cloudList);
-                    localStorage.setItem("vocab_words_100", JSON.stringify(cloudList));
+                    // Combine default words with cloud list to never lose added words
+                    const wordMap = new Map();
+                    DEFAULT_WORDS.forEach(w => wordMap.set(w.word.toLowerCase(), w));
+                    cloudList.forEach(w => wordMap.set(w.word.toLowerCase(), w));
+                    const merged = Array.from(wordMap.values()).sort((a, b) => a.word.localeCompare(b.word));
+
+                    setWords(merged);
+                    localStorage.setItem("vocab_words_100", JSON.stringify(merged));
                   }
                 } else {
                   setDoc(vocabDocRef, { list: DEFAULT_WORDS }).catch(console.error);
@@ -543,18 +561,35 @@ Respond strictly in valid JSON format:
         const trimmed = quickWordInput.trim();
         if (!trimmed) return;
 
+        // Check for existing duplicate word (case-insensitive)
+        const isDuplicate = words.some(w => w.word.toLowerCase() === trimmed.toLowerCase());
+        if (isDuplicate) {
+          alert(`"The word '${trimmed}' is already in your Word Bank!"`);
+          return;
+        }
+
         setIsAddingWord(true);
         const autoMeaning = await fetchMeaningForWord(trimmed);
 
         const newEntry = {
           id: Date.now(),
-          word: trimmed,
+          word: trimmed.charAt(0).toUpperCase() + trimmed.slice(1),
           meaning: autoMeaning
         };
 
-        await updateWordList([newEntry, ...words]);
+        // Add and sort alphabetically (A-Z)
+        const updatedList = [...words, newEntry].sort((a, b) => a.word.localeCompare(b.word));
+        await updateWordList(updatedList);
         setQuickWordInput('');
         setIsAddingWord(false);
+      };
+
+      const handleDeleteWord = async (idToDelete, wordText, e) => {
+        if (e) e.stopPropagation();
+        if (window.confirm(`Delete "${wordText}" from your Word Bank?`)) {
+          const updatedList = words.filter(w => w.id !== idToDelete);
+          await updateWordList(updatedList);
+        }
       };
 
       useEffect(() => {
@@ -663,6 +698,9 @@ Respond strictly in valid JSON format:
         }
       };
 
+      // Alphabetically sorted words list helper
+      const sortedWords = [...words].sort((a, b) => a.word.localeCompare(b.word));
+
       return (
         <div className="min-h-screen flex flex-col items-center p-4 sm:p-6 max-w-4xl mx-auto">
           {/* Header Bar */}
@@ -677,6 +715,13 @@ Respond strictly in valid JSON format:
             </div>
 
             <div className="flex items-center gap-3">
+              <button 
+                onClick={() => setMode('wordbank')}
+                className="flex items-center gap-1.5 text-xs font-bold px-3 py-2 bg-purple-100 text-purple-800 rounded-xl hover:bg-purple-200 transition"
+              >
+                <i data-lucide="book-open" className="w-4 h-4"></i>
+                <span className="hidden sm:inline">📖 Word Bank ({words.length})</span>
+              </button>
               <button 
                 onClick={() => setShowApiKeyModal(true)}
                 className="flex items-center gap-1.5 text-xs font-bold px-3 py-2 bg-amber-100 text-amber-800 rounded-xl hover:bg-amber-200 transition"
@@ -731,7 +776,7 @@ Respond strictly in valid JSON format:
                     AI Vocabulary Booster
                   </span>
                   <h2 className="text-3xl sm:text-4xl font-extrabold leading-tight mb-3">
-                    Master 100 Words with Fun AI Stories!
+                    Master Vocabulary with Fun AI Stories!
                   </h2>
                   <p className="text-indigo-100 text-sm sm:text-base mb-6">
                     Solve fill-in-the-blank mysteries generated dynamically by AI for target words.
@@ -764,7 +809,7 @@ Respond strictly in valid JSON format:
                     type="text"
                     value={quickWordInput}
                     onChange={(e) => setQuickWordInput(e.target.value)}
-                    placeholder="Enter word (AI will auto-generate meaning)..."
+                    placeholder="Enter word (AI will auto-generate meaning & sort A-Z)..."
                     className="flex-1 p-3 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none text-sm"
                     disabled={isAddingWord}
                   />
@@ -774,28 +819,66 @@ Respond strictly in valid JSON format:
                     className="px-5 py-3 bg-indigo-600 text-white font-bold rounded-2xl hover:bg-indigo-700 transition disabled:opacity-50 flex items-center gap-2"
                   >
                     {isAddingWord ? <i data-lucide="loader" className="animate-spin"></i> : <i data-lucide="plus"></i>}
-                    <span>Add</span>
+                    <span>Add Word</span>
                   </button>
                 </form>
               </div>
 
-              {/* Words Overview */}
-              <div className="bg-white rounded-3xl p-6 shadow-sm border border-indigo-50">
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                    <i data-lucide="book-open" className="text-purple-600"></i> Word Bank ({words.length})
+              {/* Navigation Card to Full Word Bank */}
+              <div className="bg-gradient-to-r from-purple-50 to-indigo-50 rounded-3xl p-6 border border-purple-100 flex justify-between items-center shadow-sm">
+                <div>
+                  <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                    <i data-lucide="book-open" className="text-purple-600"></i> Word Bank Directory
                   </h3>
+                  <p className="text-sm text-slate-500 mt-1">
+                    Currently managing <strong className="text-indigo-600">{words.length} vocabulary words</strong> sorted alphabetically (A-Z).
+                  </p>
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 max-h-60 overflow-y-auto p-1">
-                  {words.slice(0, 24).map((w) => (
-                    <div key={w.id} className="p-3 bg-slate-50 border border-slate-100 rounded-2xl flex flex-col justify-between group hover:border-indigo-200 transition">
-                      <div className="flex justify-between items-start">
-                        <span className="font-bold text-slate-800 text-sm">{w.word}</span>
-                        <button onClick={(e) => speak(w.word, e)} className="text-slate-400 hover:text-indigo-600">
+                <button
+                  onClick={() => setMode('wordbank')}
+                  className="px-5 py-3 bg-purple-600 text-white font-bold rounded-2xl shadow-md hover:bg-purple-700 transition flex items-center gap-2"
+                >
+                  <span>View All Words</span>
+                  <i data-lucide="arrow-right" className="w-4 h-4"></i>
+                </button>
+              </div>
+            </main>
+          )}
+
+          {/* FULL WORD BANK VIEW */}
+          {mode === 'wordbank' && (
+            <main className="w-full space-y-6 animate-pop">
+              <div className="flex justify-between items-center bg-white rounded-3xl p-6 border border-indigo-50 shadow-sm">
+                <div>
+                  <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
+                    <i data-lucide="book-open" className="text-purple-600"></i> All Vocabulary Words ({sortedWords.length})
+                  </h2>
+                  <p className="text-xs text-slate-500 mt-1">Automatically sorted in alphabetical order (A to Z)</p>
+                </div>
+                <button
+                  onClick={() => setMode('home')}
+                  className="px-4 py-2 bg-slate-100 text-slate-700 font-bold rounded-xl hover:bg-slate-200 transition text-sm flex items-center gap-1.5"
+                >
+                  <i data-lucide="home" className="w-4 h-4"></i> Back to Home
+                </button>
+              </div>
+
+              <div className="bg-white rounded-3xl p-6 shadow-sm border border-indigo-50">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                  {sortedWords.map((w) => (
+                    <div key={w.id} className="p-4 bg-slate-50 border border-slate-100 rounded-2xl flex justify-between items-center hover:border-indigo-200 transition">
+                      <div className="pr-2 flex-1">
+                        <span className="font-extrabold text-slate-800 text-base">{w.word}</span>
+                        <p className="text-xs text-slate-500 mt-0.5">{w.meaning}</p>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <button onClick={(e) => speak(w.word, e)} title="Listen" className="p-2 text-slate-400 hover:text-indigo-600 bg-white rounded-xl shadow-xs border border-slate-100 transition">
                           <i data-lucide="volume-2" className="w-4 h-4"></i>
                         </button>
+                        <button onClick={(e) => handleDeleteWord(w.id, w.word, e)} title="Delete word" className="p-2 text-rose-400 hover:text-rose-600 bg-white rounded-xl shadow-xs border border-slate-100 transition">
+                          <i data-lucide="trash-2" className="w-4 h-4"></i>
+                        </button>
                       </div>
-                      <span className="text-xs text-slate-500 line-clamp-1 mt-1">{w.meaning}</span>
                     </div>
                   ))}
                 </div>
@@ -805,54 +888,40 @@ Respond strictly in valid JSON format:
 
           {/* LOADING VIEW */}
           {mode === 'loading' && (
-            <main className="w-full py-16 flex flex-col items-center justify-center text-center animate-pop">
-              <div className="w-20 h-20 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mb-6"></div>
-              <h2 className="text-2xl font-bold text-slate-800 mb-2">Generating AI Stories...</h2>
-              <p className="text-slate-500 mb-6 max-w-sm">Crafting unique context questions for target words.</p>
-              <div className="w-64 bg-slate-200 rounded-full h-3 overflow-hidden">
+            <main className="w-full flex flex-col items-center justify-center p-12 bg-white rounded-3xl border border-indigo-50 shadow-sm animate-pop">
+              <div className="w-16 h-16 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mb-6"></div>
+              <h2 className="text-2xl font-bold text-slate-800 mb-2">Generating AI Quiz...</h2>
+              <p className="text-sm text-slate-500 mb-6">Creating 10 authentic literary sentences for your session.</p>
+              <div className="w-full max-w-md bg-slate-100 h-3 rounded-full overflow-hidden">
                 <div className="bg-indigo-600 h-full transition-all duration-300" style={{ width: `${loadingProgress}%` }}></div>
               </div>
-              <span className="text-xs font-bold text-slate-500 mt-2">{loadingProgress}%</span>
+              <span className="text-xs font-bold text-indigo-600 mt-2">{loadingProgress}% Complete</span>
             </main>
           )}
 
           {/* QUIZ VIEW */}
           {mode === 'quiz' && quizQuestions.length > 0 && (
-            <main className="w-full max-w-2xl space-y-6 animate-pop">
-              {/* Progress Bar & Counter */}
-              <div className="flex justify-between items-center text-sm font-bold text-slate-500">
-                <span>Question {currentIdx + 1} of {quizQuestions.length}</span>
-                <span className="text-indigo-600">Score: {score}</span>
-              </div>
-              <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
-                <div 
-                  className="bg-indigo-600 h-full transition-all duration-300" 
-                  style={{ width: `${((currentIdx + 1) / quizQuestions.length) * 100}%` }}
-                ></div>
-              </div>
-
+            <main className="w-full space-y-6 animate-pop">
               {/* Question Card */}
-              <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-md border border-indigo-50 relative">
-                <div className="mb-6">
-                  <span className="inline-block px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-bold uppercase mb-3">
-                    {quizQuestions[currentIdx].mode === 'double' ? 'Double Blank Mystery' : 'Single Blank Context'}
-                  </span>
-                  <h3 className="text-xl sm:text-2xl font-bold text-slate-800 leading-relaxed">
-                    {quizQuestions[currentIdx].sentence}
-                  </h3>
+              <div className="bg-white rounded-3xl p-6 sm:p-8 border border-indigo-50 shadow-sm space-y-6">
+                <div className="flex justify-between items-center text-sm text-slate-400 font-bold">
+                  <span>Question {currentIdx + 1} of 10</span>
+                  <span className="text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full">Score: {score}</span>
                 </div>
 
-                {/* Options */}
-                <div className="space-y-3">
+                <div className="p-6 bg-indigo-50/50 border border-indigo-100 rounded-2xl text-slate-800 text-lg sm:text-xl font-medium leading-relaxed">
+                  {quizQuestions[currentIdx].sentence}
+                </div>
+
+                {/* Options List without invalid nested buttons */}
+                <div className="grid grid-cols-1 gap-3">
                   {quizQuestions[currentIdx].options.map((opt, i) => {
-                    let btnStyle = "bg-slate-50 border-slate-200 text-slate-700 hover:border-indigo-300";
+                    let btnStyle = "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100";
                     if (selectedOption !== null) {
                       if (opt === quizQuestions[currentIdx].correctAnswer) {
-                        btnStyle = "bg-emerald-500 border-emerald-500 text-white shadow-md";
+                        btnStyle = "bg-emerald-50 border-emerald-500 text-emerald-800 font-bold";
                       } else if (opt === selectedOption) {
-                        btnStyle = "bg-rose-500 border-rose-500 text-white shadow-md";
-                      } else {
-                        btnStyle = "bg-slate-50 border-slate-100 text-slate-400 opacity-60";
+                        btnStyle = "bg-rose-50 border-rose-400 text-rose-800";
                       }
                     }
 
@@ -863,110 +932,109 @@ Respond strictly in valid JSON format:
                         tabIndex={0}
                         onClick={() => handleOptionSelect(opt)}
                         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleOptionSelect(opt); }}
-                        className={`w-full p-4 rounded-2xl border-2 font-bold text-left text-base sm:text-lg transition flex justify-between items-center cursor-pointer ${btnStyle} ${selectedOption !== null ? 'pointer-events-none' : ''}`}
+                        className={`p-4 rounded-2xl border-2 transition cursor-pointer flex justify-between items-center ${btnStyle}`}
                       >
-                        <span>{opt}</span>
-                        <div className="flex items-center gap-2">
-                          <button 
-                            type="button"
-                            onClick={(e) => speak(opt, e)} 
-                            className="p-1.5 rounded-xl bg-black/5 hover:bg-black/10 transition pointer-events-auto"
-                          >
-                            <i data-lucide="volume-2" className="w-4 h-4"></i>
-                          </button>
-                        </div>
+                        <span className="font-semibold text-base">{opt}</span>
+                        <button
+                          type="button"
+                          onClick={(e) => speak(opt, e)}
+                          className="p-2 text-slate-400 hover:text-indigo-600 transition"
+                          title="Pronounce"
+                        >
+                          <i data-lucide="volume-2" className="w-5 h-5"></i>
+                        </button>
                       </div>
                     );
                   })}
                 </div>
 
-                {/* Answer Feedback & Explanation */}
+                {/* Feedback / Next Button */}
                 {selectedOption !== null && (
-                  <div className={`mt-6 p-4 rounded-2xl ${isCorrect ? 'bg-emerald-50 text-emerald-900 border border-emerald-200' : 'bg-rose-50 text-rose-900 border border-rose-200'} animate-pop`}>
-                    <div className="flex items-center gap-2 font-bold mb-1">
-                      <i data-lucide={isCorrect ? "check-circle-2" : "alert-circle"} className={isCorrect ? "text-emerald-600" : "text-rose-600"}></i>
-                      <span>{isCorrect ? "Awesome! That's correct!" : "Not quite right!"}</span>
+                  <div className="pt-4 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4 animate-pop">
+                    <div className="flex items-center gap-2">
+                      {isCorrect ? (
+                        <span className="text-emerald-600 font-extrabold flex items-center gap-1.5">
+                          <i data-lucide="check-circle-2"></i> Correct!
+                        </span>
+                      ) : (
+                        <span className="text-rose-600 font-extrabold flex items-center gap-1.5">
+                          <i data-lucide="x-circle"></i> Incorrect
+                        </span>
+                      )}
+                      <p className="text-xs text-slate-500 ml-2">{quizQuestions[currentIdx].explanation}</p>
                     </div>
-                    <p className="text-sm mt-1">{quizQuestions[currentIdx].explanation}</p>
-                    
-                    {!isCorrect && (
-                      <div className="mt-3 text-xs border-t border-rose-200/60 pt-2 text-rose-700">
-                        <strong>Chosen Word Meaning:</strong> {
-                          words.find(w => w.word === selectedOption)?.meaning || "Selected word does not fit the target contextual requirement."
-                        }
-                      </div>
-                    )}
+
+                    <button
+                      onClick={nextQuestion}
+                      className="w-full sm:w-auto px-6 py-3 bg-indigo-600 text-white font-extrabold rounded-2xl shadow-md hover:bg-indigo-700 transition flex items-center justify-center gap-2"
+                    >
+                      <span>{currentIdx + 1 === quizQuestions.length ? "See Results" : "Next Question"}</span>
+                      <i data-lucide="arrow-right"></i>
+                    </button>
                   </div>
                 )}
               </div>
-
-              {/* Next Button */}
-              {selectedOption !== null && (
-                <button
-                  onClick={nextQuestion}
-                  className="w-full py-4 bg-indigo-600 text-white font-extrabold rounded-2xl shadow-lg hover:bg-indigo-700 transition flex justify-center items-center gap-2 text-lg animate-pop"
-                >
-                  <span>{currentIdx + 1 === quizQuestions.length ? "Finish Quiz" : "Next Question"}</span>
-                  <i data-lucide="arrow-right"></i>
-                </button>
-              )}
             </main>
           )}
 
           {/* SUMMARY VIEW */}
           {mode === 'summary' && (
-            <main className="w-full max-w-lg animate-pop space-y-6">
-              <div ref={summaryRef} className="bg-white rounded-3xl p-8 shadow-xl border border-indigo-50 text-center relative overflow-hidden">
-                {score >= 80 ? (
-                  <>
-                    <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4 shadow-inner">
-                      <i data-lucide="check-circle" className="w-10 h-10"></i>
-                    </div>
-                    <span className="inline-block px-4 py-1 bg-emerald-100 text-emerald-800 text-xs font-black uppercase rounded-full mb-2">
-                      🎉 PASS CERTIFICATE
-                    </span>
-                    <h2 className="text-3xl font-extrabold text-slate-800 mb-1">CONGRATULATIONS!</h2>
-                    <p className="text-emerald-600 font-bold text-sm mb-6">You passed the Vocabulary Challenge!</p>
-                  </>
-                ) : (
-                  <>
-                    <div className="w-20 h-20 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto mb-4 shadow-inner">
-                      <i data-lucide="award" className="w-10 h-10"></i>
-                    </div>
-                    <h2 className="text-3xl font-extrabold text-slate-800 mb-1">Not bad!</h2>
-                    <p className="text-amber-600 font-bold text-sm mb-6">Try again to get PASS! (Goal: 80+ points)</p>
-                  </>
-                )}
-
-                <div className="bg-gradient-to-r from-indigo-50 to-purple-50 p-6 rounded-2xl border border-indigo-100 mb-6">
-                  <span className="text-xs font-bold uppercase tracking-wider text-indigo-500">Your Final Score</span>
-                  <div className="text-5xl font-black text-indigo-600 my-1">{score}</div>
-                  <span className="text-xs text-slate-500">{score / 10} / 10 Questions Correct ({score >= 80 ? 'PASS' : 'TRY AGAIN'})</span>
+            <main className="w-full space-y-6 animate-pop">
+              <div ref={summaryRef} className="bg-white rounded-3xl p-8 border border-indigo-50 shadow-sm text-center space-y-6">
+                <div className="inline-flex p-4 rounded-full bg-indigo-50 text-indigo-600 mb-2">
+                  <i data-lucide="award" className="w-12 h-12"></i>
                 </div>
 
-                <div className="flex gap-3">
+                {score >= 80 ? (
+                  <div>
+                    <span className="inline-block px-4 py-1.5 bg-emerald-100 text-emerald-800 text-xs font-black rounded-full uppercase tracking-wider mb-2">
+                      🎉 PASS!
+                    </span>
+                    <h2 className="text-3xl font-extrabold text-slate-800">Outstanding Job!</h2>
+                    <p className="text-sm text-slate-500 mt-1">You solved the quiz with flying colors!</p>
+                  </div>
+                ) : (
+                  <div>
+                    <span className="inline-block px-4 py-1.5 bg-amber-100 text-amber-800 text-xs font-black rounded-full uppercase tracking-wider mb-2">
+                      💪 NOT BAD! TRY AGAIN
+                    </span>
+                    <h2 className="text-3xl font-extrabold text-slate-800">Keep Practicing!</h2>
+                    <p className="text-sm text-slate-500 mt-1">Score 80 or higher to PASS next time!</p>
+                  </div>
+                )}
+
+                <div className="py-6 border-y border-slate-100 flex justify-center gap-8">
+                  <div>
+                    <span className="text-xs text-slate-400 font-bold block uppercase">Final Score</span>
+                    <span className="text-4xl font-black text-indigo-600">{score} / 100</span>
+                  </div>
+                  <div>
+                    <span className="text-xs text-slate-400 font-bold block uppercase">High Score</span>
+                    <span className="text-4xl font-black text-amber-500">{highScore}</span>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap justify-center gap-3 pt-2">
                   <button
                     onClick={() => startQuiz(selectedQuizMode)}
-                    className="flex-1 py-3 bg-indigo-600 text-white font-bold rounded-2xl shadow-md hover:bg-indigo-700 transition"
+                    className="px-6 py-3 bg-indigo-600 text-white font-extrabold rounded-2xl shadow-md hover:bg-indigo-700 transition flex items-center gap-2"
                   >
-                    Play Again
+                    <i data-lucide="rotate-ccw"></i> Play Again
                   </button>
                   <button
                     onClick={downloadScreenshot}
-                    className="px-4 py-3 bg-slate-100 text-slate-700 font-bold rounded-2xl hover:bg-slate-200 transition flex items-center gap-2"
+                    className="px-6 py-3 bg-slate-100 text-slate-700 font-extrabold rounded-2xl hover:bg-slate-200 transition flex items-center gap-2"
                   >
-                    <i data-lucide="camera" className="w-4 h-4"></i>
-                    <span>Save Result</span>
+                    <i data-lucide="download"></i> Save Result Card
+                  </button>
+                  <button
+                    onClick={() => setMode('home')}
+                    className="px-6 py-3 bg-purple-100 text-purple-700 font-extrabold rounded-2xl hover:bg-purple-200 transition flex items-center gap-2"
+                  >
+                    <i data-lucide="home"></i> Home
                   </button>
                 </div>
               </div>
-
-              <button
-                onClick={() => setMode('home')}
-                className="w-full py-3 bg-white text-slate-600 font-bold rounded-2xl border border-slate-200 hover:bg-slate-50 transition"
-              >
-                Back to Home
-              </button>
             </main>
           )}
         </div>
