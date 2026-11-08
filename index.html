@@ -462,15 +462,6 @@ Respond strictly in valid JSON format:
       const [isCorrect, setIsCorrect] = useState(null);
       const [loadingProgress, setLoadingProgress] = useState(0);
 
-      // Store recently solved word IDs so they are not asked repeatedly
-      const [recentSolvedIds, setRecentSolvedIds] = useState(() => {
-        try {
-          return JSON.parse(localStorage.getItem("vocab_recent_solved") || "[]");
-        } catch (e) {
-          return [];
-        }
-      });
-
       const summaryRef = useRef(null);
 
       useEffect(() => {
@@ -630,42 +621,25 @@ Respond strictly in valid JSON format:
 
         const currentApiKey = localStorage.getItem("gemini_user_api_key") || "AQ.Ab8RN6IwykbkZIt6Rtl2yGY5Ft_71EEHvArU498dQGuey7ggjQ";
 
-        // Filter out recently solved words to prevent repeating the same words
-        let availablePool = words.filter(w => !recentSolvedIds.includes(w.id));
-        // If pool is too small, reset history
-        if (availablePool.length < 15) {
-          availablePool = [...words];
-          setRecentSolvedIds([]);
-          localStorage.removeItem("vocab_recent_solved");
-        }
+        // Unique Shuffle of words pool - guaranteeing NO repeated target words across all 10 questions
+        const pool = [...words].sort(() => 0.5 - Math.random());
 
-        // Shuffle candidate pool randomly
-        const pool = [...availablePool].sort(() => 0.5 - Math.random());
-
-        const newSolvedIds = [];
         const questionsArr = [];
         for (let i = 0; i < 10; i++) {
           if (quizType === 'double') {
             const idx1 = (i * 2) % pool.length;
             const idx2 = (i * 2 + 1) % pool.length;
             const targets = [pool[idx1], pool[idx2]];
-            newSolvedIds.push(pool[idx1].id, pool[idx2].id);
             const q = await fetchAIQuestion(targets, words, 'double', currentApiKey, i);
             questionsArr.push(q);
           } else {
             const idx = i % pool.length;
             const targets = [pool[idx]];
-            newSolvedIds.push(pool[idx].id);
             const q = await fetchAIQuestion(targets, words, 'single', currentApiKey, i);
             questionsArr.push(q);
           }
           setLoadingProgress(Math.round(((i + 1) / 10) * 100));
         }
-
-        // Update recently solved history
-        const updatedSolvedHistory = [...recentSolvedIds, ...newSolvedIds].slice(-40);
-        setRecentSolvedIds(updatedSolvedHistory);
-        localStorage.setItem("vocab_recent_solved", JSON.stringify(updatedSolvedHistory));
 
         setQuizQuestions(questionsArr);
         setCurrentIdx(0);
